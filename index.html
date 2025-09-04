@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camera Pro</title>
+    <meta name="description" content="Professional camera app with QR scanning">
+    <meta name="theme-color" content="#000000">
+    
+    <!-- PWA Meta Tags -->
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="icon-192x192.png" sizes="192x192" type="image/png">
+    <link rel="apple-touch-icon" href="icon-192x192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    
+    <!-- Font Awesome CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #000;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        .camera-container {
+            position: relative;
+            width: 100%;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #000;
+        }
+
+        #camera-stream {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            background: #000;
+            transition: transform 0.3s ease;
+        }
+
+        .camera-loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            text-align: center;
+            z-index: 10;
+        }
+
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-top: 3px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .camera-error {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            text-align: center;
+            z-index: 10;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+        }
+
+        .camera-error i {
+            font-size: 48px;
+            margin-bottom: 15px;
+            opacity: 0.7;
+        }
+
+        .top-controls {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            z-index: 20;
+            background: linear-gradient(180deg, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0) 100%);
+            padding-top: max(15px, env(safe-area-inset-top));
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: white;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .recording-dot {
+            width: 8px;
+            height: 8px;
+            background: #ff4444;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        .install-prompt {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.95);
+            color: #333;
+            padding: 12px 20px;
+            border-radius: 25px;
+            backdrop-filter: blur(10px);
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            z-index: 30;
+            display: none;
+        }
+
+        .install-prompt:hover {
+            background: white;
+            transform: translateX(-50%) scale(1.05);
+        }
+
+        .bottom-controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 30px;
+            padding: 30px 20px;
+            z-index: 20;
+            background: linear-gradient(0deg, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 100%);
+            padding-bottom: max(30px, calc(env(safe-area-inset-bottom) + 15px));
+        }
+
+        .control-button {
+            width: 60px;
+            height: 60px;
+            border: none;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        .control-button:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: scale(1.1);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+        }
+
+        .control-button:active {
+            transform: scale(0.95);
+            background: rgba(255, 255, 255, 0.4);
+        }
+
+        .control-button.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .control-button.disabled:hover {
+            transform: none;
+        }
+
+        #capture-button {
+            width: 80px;
+            height: 80px;
+            background: white;
+            color: #333;
+            font-size: 32px;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+        }
+
+        #capture-button:hover {
+            background: #f0f0f0;
+            transform: scale(1.05);
+        }
+
+        #capture-button.recording {
+            background: #ff4444;
+            color: white;
+        }
+
+        #capture-button.recording:hover {
+            background: #ff6666;
+        }
+
+        .capture-button-inner {
+            width: 65px;
+            height: 65px;
+            background: white;
+            border-radius: 50%;
+            transition: all 0.3s ease;
+        }
+
+        #capture-button.recording .capture-button-inner {
+            width: 30px;
+            height: 30px;
+            border-radius: 6px;
+            background: white;
+        }
+
+        .thumbnail-preview {
+            position: absolute;
+            bottom: 40px;
+            right: 20px;
+            width: 60px;
+            height: 60px;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            z-index: 25;
+            display: none;
+        }
+
+        .thumbnail-preview:hover {
+            transform: scale(1.1);
+            border-color: white;
+        }
+
+        .thumbnail-preview img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .mode-selector {
+            position: absolute;
+            bottom: 120px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 25px;
+            padding: 5px;
+            backdrop-filter: blur(10px);
+            z-index: 20;
+        }
+
+        .mode-button {
+            padding: 10px 20px;
+            border: none;
+            background: transparent;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 14px;
+            font-weight: 500;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .mode-button.active {
+            background: white;
+            color: #333;
+        }
+
+        .flash-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: white;
+            opacity: 0;
+            z-index: 15;
+            pointer-events: none;
+        }
+
+        .flash-overlay.active {
+            animation: flash 0.3s ease-out;
+        }
+
+        @keyframes flash {
+            0% { opacity: 0; }
+            50% { opacity: 0.8; }
+            100% { opacity: 0; }
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .bottom-controls {
+                gap: 25px;
+                padding: 25px 15px;
+            }
+            
+            .control-button {
+                width: 55px;
+                height: 55px;
+                font-size: 22px;
+            }
+            
+            #capture-button {
+                width: 75px;
+                height: 75px;
+                font-size: 30px;
+            }
+            
+            .thumbnail-preview {
+                width: 50px;
+                height: 50px;
+                bottom: 35px;
+                right: 15px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .bottom-controls {
+                gap: 20px;
+                padding: 20px 10px;
+            }
+            
+            .control-button {
+                width: 50px;
+                height: 50px;
+                font-size: 20px;
+            }
+            
+            #capture-button {
+                width: 70px;
+                height: 70px;
+                font-size: 28px;
+            }
+        }
+
+        @media (min-width: 1024px) {
+            .camera-container {
+                max-width: 400px;
+                margin: 0 auto;
+                height: 100vh;
+                border-radius: 0;
+            }
+            
+            #camera-stream {
+                border-radius: 0;
+            }
+        }
+
+        /* Offline indicator */
+        .offline-indicator {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: #ff4444;
+            color: white;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+            z-index: 30;
+            display: none;
+        }
+
+        .offline-indicator.show {
+            display: block;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="camera-container">
+        <!-- Camera Stream -->
+        <video id="camera-stream" autoplay playsinline muted></video>
+        
+        <!-- Loading State -->
+        <div id="camera-loading" class="camera-loading">
+            <div class="loading-spinner"></div>
+            <p>Initializing camera...</p>
+        </div>
+        
+        <!-- Error State -->
+        <div id="camera-error" class="camera-error" style="display: none;">
+            <i class="fas fa-camera-slash"></i>
+            <h3>Camera Unavailable</h3>
+            <p>Please check your camera permissions and try again.</p>
+            <button onclick="initializeCamera()" style="margin-top: 15px; padding: 10px 20px; border: none; border-radius: 25px; background: white; color: #333; cursor: pointer;">Retry</button>
+        </div>
+        
+        <!-- Top Controls -->
+        <div class="top-controls">
+            <div class="status-indicator">
+                <span id="recording-status" style="display: none;">
+                    <div class="recording-dot"></div>
+                    REC
+                </span>
+            </div>
+            <div class="offline-indicator" id="offline-indicator">
+                <i class="fas fa-wifi-slash"></i> Offline
+            </div>
+        </div>
+        
+        <!-- Install Prompt -->
+        <div id="install-prompt" class="install-prompt">
+            <i class="fas fa-download"></i> Install App
+        </div>
+        
+        <!-- Mode Selector -->
+        <div class="mode-selector">
+            <button class="mode-button active" data-mode="photo">Photo</button>
+            <button class="mode-button" data-mode="video">Video</button>
+        </div>
+        
+        <!-- Bottom Controls -->
+        <div class="bottom-controls">
+            <!-- Switch Camera Button -->
+            <button id="switch-camera" class="control-button" title="Switch Camera">
+                <i class="fas fa-sync-alt"></i>
+            </button>
+            
+            <!-- Capture Button -->
+            <button id="capture-button" class="control-button" title="Capture">
+                <div class="capture-button-inner"></div>
+            </button>
+            
+            <!-- QR Scan Button -->
+            <button id="qr-scan" class="control-button" title="QR Scan">
+                <i class="fas fa-qrcode"></i>
+            </button>
+        </div>
+        
+        <!-- Thumbnail Preview -->
+        <div id="thumbnail-preview" class="thumbnail-preview">
+            <img id="thumbnail-img" src="" alt="Last photo">
+        </div>
+        
+        <!-- Flash Overlay -->
+        <div id="flash-overlay" class="flash-overlay"></div>
+    </div>
+
+    <!-- Canvas for photo capture (hidden) -->
+    <canvas id="capture-canvas" style="display: none;"></canvas>
+    
+    <!-- QR Scanner Library -->
+    <script src="https://unpkg.com/@zxing/library@latest"></script>
+    
+    <script>
+        // Global variables
+        let currentStream = null;
+        let currentMode = 'photo';
+        let isRecording = false;
+        let mediaRecorder = null;
+        let recordedChunks = [];
+        let facingMode = 'environment'; // 'user' for front, 'environment' for back
+        let deferredPrompt = null;
+        let lastCapturedImage = null;
+
+        // DOM elements
+        const video = document.getElementById('camera-stream');
+        const captureButton = document.getElementById('capture-button');
+        const switchCameraButton = document.getElementById('switch-camera');
+        const qrScanButton = document.getElementById('qr-scan');
+        const loadingElement = document.getElementById('camera-loading');
+        const errorElement = document.getElementById('camera-error');
+        const flashOverlay = document.getElementById('flash-overlay');
+        const thumbnailPreview = document.getElementById('thumbnail-preview');
+        const thumbnailImg = document.getElementById('thumbnail-img');
+        const canvas = document.getElementById('capture-canvas');
+        const ctx = canvas.getContext('2d');
+        const recordingStatus = document.getElementById('recording-status');
+        const installPrompt = document.getElementById('install-prompt');
+        const offlineIndicator = document.getElementById('offline-indicator');
+
+        // Initialize app when DOM is loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeApp();
+            setupEventListeners();
+            checkOnlineStatus();
+        });
+
+        function initializeApp() {
+            // Register service worker
+            if ('serviceWorker' in navigator) {
+                window.addEventListener('load', () => {
+                    navigator.serviceWorker.register('sw.js')
+                        .then((registration) => {
+                            console.log('SW registered: ', registration);
+                        })
+                        .catch((registrationError) => {
+                            console.log('SW registration failed: ', registrationError);
+                        });
+                });
+            }
+
+            // Initialize camera
+            initializeCamera();
+
+            // Setup PWA install prompt
+            setupInstallPrompt();
+
+            // Load last captured image from localStorage
+            loadLastImage();
+        }
+
+        function setupEventListeners() {
+            // Mode selector
+            document.querySelectorAll('.mode-button').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    document.querySelectorAll('.mode-button').forEach(b => b.classList.remove('active'));
+                    e.target.classList.add('active');
+                    currentMode = e.target.dataset.mode;
+                    updateCaptureButton();
+                });
+            });
+
+            // Capture button
+            captureButton.addEventListener('click', handleCapture);
+            
+            // Switch camera button
+            switchCameraButton.addEventListener('click', switchCamera);
+            
+            // QR scan button
+            qrScanButton.addEventListener('click', startQRScan);
+            
+            // Thumbnail preview
+            thumbnailPreview.addEventListener('click', showLastImage);
+
+            // Online/offline status
+            window.addEventListener('online', checkOnlineStatus);
+            window.addEventListener('offline', checkOnlineStatus);
+
+            // Install prompt
+            installPrompt.addEventListener('click', installApp);
+        }
+
+        async function initializeCamera() {
+            try {
+                loadingElement.style.display = 'block';
+                errorElement.style.display = 'none';
+                
+                // Stop existing stream
+                if (currentStream) {
+                    currentStream.getTracks().forEach(track => track.stop());
+                }
+
+                const constraints = {
+                    video: {
+                        facingMode: facingMode,
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 }
+                    },
+                    audio: currentMode === 'video'
+                };
+
+                currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = currentStream;
+                
+                video.onloadedmetadata = () => {
+                    loadingElement.style.display = 'none';
+                    enableControls();
+                };
+
+            } catch (error) {
+                console.error('Error accessing camera:', error);
+                loadingElement.style.display = 'none';
+                errorElement.style.display = 'block';
+                disableControls();
+            }
+        }
+
+        function enableControls() {
+            [captureButton, switchCameraButton, qrScanButton].forEach(btn => {
+                btn.classList.remove('disabled');
+                btn.disabled = false;
+            });
+        }
+
+        function disableControls() {
+            [captureButton, switchCameraButton, qrScanButton].forEach(btn => {
+                btn.classList.add('disabled');
+                btn.disabled = true;
+            });
+        }
+
+        async function switchCamera() {
+            facingMode = facingMode === 'user' ? 'environment' : 'user';
+            
+            // Add smooth transition
+            video.style.transform = 'scaleX(-1)';
+            setTimeout(() => {
+                video.style.transform = 'scaleX(1)';
+            }, 150);
+            
+            await initializeCamera();
+        }
+
+        function updateCaptureButton() {
+            const icon = captureButton.querySelector('i') || document.createElement('i');
+            const inner = captureButton.querySelector('.capture-button-inner');
+            
+            if (currentMode === 'photo') {
+                captureButton.title = 'Capture Photo';
+                if (inner) inner.style.display = 'block';
+            } else {
+                captureButton.title = isRecording ? 'Stop Recording' : 'Start Recording';
+                if (inner) inner.style.display = 'block';
+            }
+        }
+
+        async function handleCapture() {
+            if (currentMode === 'photo') {
+                await capturePhoto();
+            } else {
+                if (isRecording) {
+                    stopVideoRecording();
+                } else {
+                    startVideoRecording();
+                }
+            }
+        }
+
+        async function capturePhoto() {
+            // Flash effect
+            flashOverlay.classList.add('active');
+            setTimeout(() => flashOverlay.classList.remove('active'), 300);
+
+            // Set canvas size to match video
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+
+            // Draw video frame to canvas
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            // Convert to blob and download
+            canvas.toBlob(async (blob) => {
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                const filename = `photo-${timestamp}.jpg`;
+                
+                // Create download link
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                a.click();
+                URL.revokeObjectURL(url);
+
+                // Update thumbnail
+                const imageUrl = canvas.toDataURL('image/jpeg', 0.8);
+                updateThumbnail(imageUrl);
+                
+                // Save to localStorage for offline access
+                try {
+                    localStorage.setItem('lastCapturedImage', imageUrl);
+                } catch (e) {
+                    console.warn('Could not save image to localStorage:', e);
+                }
+            }, 'image/jpeg', 0.9);
+        }
+
+        async function startVideoRecording() {
+            try {
+                const options = { mimeType: 'video/webm;codecs=vp9' };
+                mediaRecorder = new MediaRecorder(currentStream, options);
+                recordedChunks = [];
+
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        recordedChunks.push(event.data);
+                    }
+                };
+
+                mediaRecorder.onstop = () => {
+                    const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                    const filename = `video-${timestamp}.webm`;
+                    
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                };
+
+                mediaRecorder.start();
+                isRecording = true;
+                captureButton.classList.add('recording');
+                recordingStatus.style.display = 'flex';
+                updateCaptureButton();
+
+            } catch (error) {
+                console.error('Error starting video recording:', error);
+            }
+        }
+
+        function stopVideoRecording() {
+            if (mediaRecorder && isRecording) {
+                mediaRecorder.stop();
+                isRecording = false;
+                captureButton.classList.remove('recording');
+                recordingStatus.style.display = 'none';
+                updateCaptureButton();
+            }
+        }
+
+        function updateThumbnail(imageUrl) {
+            thumbnailImg.src = imageUrl;
+            thumbnailPreview.style.display = 'block';
+            lastCapturedImage = imageUrl;
+        }
+
+        function loadLastImage() {
+            try {
+                const savedImage = localStorage.getItem('lastCapturedImage');
+                if (savedImage) {
+                    updateThumbnail(savedImage);
+                }
+            } catch (e) {
+                console.warn('Could not load last image:', e);
+            }
+        }
+
+        function showLastImage() {
+            if (lastCapturedImage) {
+                const newWindow = window.open();
+                newWindow.document.write(`
+                    <html>
+                        <head><title>Captured Image</title></head>
+                        <body style="margin:0; background:#000; display:flex; align-items:center; justify-content:center; min-height:100vh;">
+                            <img src="${lastCapturedImage}" style="max-width:100%; max-height:100vh; object-fit:contain;">
+                        </body>
+                    </html>
+                `);
+            }
+        }
+
+        async function startQRScan() {
+            try {
+                const codeReader = new ZXing.BrowserQRCodeReader();
+                const result = await codeReader.decodeOnceFromVideoDevice(undefined, video);
+                
+                alert(`QR Code detected: ${result.text}`);
+                
+                // Copy to clipboard if available
+                if (navigator.clipboard) {
+                    await navigator.clipboard.writeText(result.text);
+                    console.log('QR code text copied to clipboard');
+                }
+            } catch (error) {
+                console.error('QR scan error:', error);
+                alert('No QR code found. Please try again.');
+            }
+        }
+
+        // PWA Installation
+        function setupInstallPrompt() {
+            window.addEventListener('beforeinstallprompt', (e) => {
+                e.preventDefault();
+                deferredPrompt = e;
+                installPrompt.style.display = 'block';
+            });
+
+            window.addEventListener('appinstalled', () => {
+                installPrompt.style.display = 'none';
+                deferredPrompt = null;
+            });
+        }
+
+        async function installApp() {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                const { outcome } = await deferredPrompt.userChoice;
+                console.log(`User response to the install prompt: ${outcome}`);
+                deferredPrompt = null;
+                installPrompt.style.display = 'none';
+            }
+        }
+
+        // Online/Offline status
+        function checkOnlineStatus() {
+            if (navigator.onLine) {
+                offlineIndicator.classList.remove('show');
+            } else {
+                offlineIndicator.classList.add('show');
+            }
+        }
+
+        // Prevent context menu on long press (mobile)
+        document.addEventListener('contextmenu', (e) => e.preventDefault());
+
+        // Handle visibility changes
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && isRecording) {
+                stopVideoRecording();
+            }
+        });
+    </script>
+</body>
+</html>
